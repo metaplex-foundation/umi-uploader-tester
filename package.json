@@ -25,7 +25,7 @@
     "@mantine/form": "^7.3.2",
     "@mantine/hooks": "7.3.1",
     "@mantine/notifications": "^7.3.2",
-    "@metaplex-foundation/mpl-inscription": "^0.1.0",
+    "@metaplex-foundation/mpl-inscription": "^0.2.0",
     "@metaplex-foundation/mpl-token-metadata": "^3.1.2",
     "@metaplex-foundation/mpl-toolbox": "^0.9.1",
     "@metaplex-foundation/umi": "^0.8.10",

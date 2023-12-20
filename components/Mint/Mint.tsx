@@ -114,7 +114,6 @@ export function Mint() {
           metadataAccount,
           mintAccount: mint.publicKey,
           tokenMetadataAccount,
-          tokenAccount,
           inscriptionShardAccount: await fetchIdempotentInscriptionShard(umi),
         }).add(writeData(umi, {
           inscriptionAccount,

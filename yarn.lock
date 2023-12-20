@@ -2658,14 +2658,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@metaplex-foundation/mpl-inscription@npm:^0.1.0":
-  version: 0.1.0
-  resolution: "@metaplex-foundation/mpl-inscription@npm:0.1.0"
+"@metaplex-foundation/mpl-inscription@npm:^0.2.0":
+  version: 0.2.0
+  resolution: "@metaplex-foundation/mpl-inscription@npm:0.2.0"
   dependencies:
     "@metaplex-foundation/mpl-toolbox": "npm:^0.8.0"
   peerDependencies:
     "@metaplex-foundation/umi": ^0.8.2
-  checksum: 19645f511ea9726512dcf1e70041598121afe888282570d0b8cb3d9bd919209fa09e8785196681cdeca41658ebb5b41e406114e3fbb799bd3c3764b706dc392f
+  checksum: b17eefdcaa9aaf20b5b86d5445b9895cdc29d37cd12f0f0308598b7e0a19e87e6a13f9bb21adc3dd4c77a4440a9cea45d2dcbc1d301ee5aaea2f83bf4e9b1453
   languageName: node
   linkType: hard
 
@@ -14359,7 +14359,7 @@ __metadata:
     "@mantine/form": "npm:^7.3.2"
     "@mantine/hooks": "npm:7.3.1"
     "@mantine/notifications": "npm:^7.3.2"
-    "@metaplex-foundation/mpl-inscription": "npm:^0.1.0"
+    "@metaplex-foundation/mpl-inscription": "npm:^0.2.0"
     "@metaplex-foundation/mpl-token-metadata": "npm:^3.1.2"
     "@metaplex-foundation/mpl-toolbox": "npm:^0.9.1"
     "@metaplex-foundation/umi": "npm:^0.8.10"
