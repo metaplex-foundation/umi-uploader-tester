@@ -92,7 +92,7 @@ export function Mint() {
       const inscriptionAccount = await findMintInscriptionPda(umi, {
         mint: mint.publicKey,
       });
-      const metadataAccount = await findInscriptionMetadataPda(umi, {
+      const inscriptionMetadataAccount = await findInscriptionMetadataPda(umi, {
         inscriptionAccount: inscriptionAccount[0],
       });
 
@@ -111,13 +111,13 @@ export function Mint() {
 
       const inscribeRes = await initializeFromMint(umi, {
           mintInscriptionAccount: inscriptionAccount,
-          metadataAccount,
+          inscriptionMetadataAccount,
           mintAccount: mint.publicKey,
           tokenMetadataAccount,
           inscriptionShardAccount: await fetchIdempotentInscriptionShard(umi),
         }).add(writeData(umi, {
           inscriptionAccount,
-          metadataAccount,
+          inscriptionMetadataAccount,
           value: Buffer.from(
             JSON.stringify(metadata)
           ),
@@ -128,14 +128,14 @@ export function Mint() {
       // Then an account was created with the correct data.
       const inscriptionMetadata = await fetchInscriptionMetadata(
         umi,
-        metadataAccount
+        inscriptionMetadataAccount
       );
 
       // console.log(inscriptionMetadata);
 
       const i = {
         inscriptionAccount: inscriptionAccount[0],
-        metadataAccount,
+        inscriptionMetadataAccount,
         mintAccount: mint.publicKey,
         tokenMetadataAccount: tokenMetadataAccount[0],
         tokenAccount,
