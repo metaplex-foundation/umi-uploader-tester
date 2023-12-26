@@ -121,6 +121,7 @@ export function Mint() {
           value: Buffer.from(
             JSON.stringify(metadata)
           ),
+          associatedTag: null,
         })).sendAndConfirm(umi);
 
       console.log('inscribeRes', signatureToString(inscribeRes.signature));
