@@ -8,9 +8,10 @@ import { MplInscription, createShard, fetchInscriptionMetadata, findInscriptionM
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { walletAdapterIdentity } from '@metaplex-foundation/umi-signer-wallet-adapters';
 import { Umi, generateSigner, percentAmount, publicKey } from '@metaplex-foundation/umi';
-import { TokenStandard, createV1, findMetadataPda, mintV1, mplTokenMetadata } from '@metaplex-foundation/mpl-token-metadata';
+import { TokenStandard, createV1, findMetadataPda, mintV1, mplTokenMetadata, engrave } from '@metaplex-foundation/mpl-token-metadata';
+import { MPL_ENGRAVER_PROGRAM_ID } from '@metaplex-foundation/mpl-engraver';
 import { CodeHighlightTabs } from '@mantine/code-highlight';
-import { findAssociatedTokenPda } from '@metaplex-foundation/mpl-toolbox';
+import { findAssociatedTokenPda, setComputeUnitLimit } from '@metaplex-foundation/mpl-toolbox';
 import { base58 } from '@metaplex-foundation/umi/serializers';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
@@ -34,7 +35,7 @@ async function fetchIdempotentInscriptionShard(umi: Umi) {
   return shardAccount;
 }
 
-const signatureToString = (signature: Uint8Array) => base58.deserialize(signature);
+const signatureToString = (signature: Uint8Array) => base58.deserialize(signature)[0];
 
 const validateMetadata = (metadata: any) => {
   if (!metadata?.name?.length) return 'Name is required';
@@ -71,12 +72,15 @@ export function Mint() {
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [fetchLoading, setFetchLoading] = useState(false);
   const [opened, { open, close }] = useDisclosure(false);
+  const [modalContent, setModalContent] = useState<string>('Minting your Inscription...');
+  const [engraveTx, setEngraveTx] = useState<string>();
 
   const handleMint = useCallback(async () => {
     // console.log(form.values, wallet, metadata);
     if (!wallet.wallet || !metadata) return;
     try {
       open();
+      setModalContent('Minting your Inscription...');
       setInscription(null);
       const umi = createUmi(connection);
 
@@ -110,19 +114,17 @@ export function Mint() {
       console.log('mintRes', signatureToString(mintRes.signature));
 
       const inscribeRes = await initializeFromMint(umi, {
-          mintInscriptionAccount: inscriptionAccount,
-          inscriptionMetadataAccount,
-          mintAccount: mint.publicKey,
-          tokenMetadataAccount,
-          inscriptionShardAccount: await fetchIdempotentInscriptionShard(umi),
-        }).add(writeData(umi, {
-          inscriptionAccount,
-          inscriptionMetadataAccount,
-          value: Buffer.from(
-            JSON.stringify(metadata)
-          ),
-          associatedTag: null,
-        })).sendAndConfirm(umi);
+        mintAccount: mint.publicKey,
+        inscriptionShardAccount: await fetchIdempotentInscriptionShard(umi),
+      }).add(writeData(umi, {
+        inscriptionAccount,
+        inscriptionMetadataAccount,
+        value: Buffer.from(
+          JSON.stringify(metadata)
+        ),
+        associatedTag: null,
+        offset: 0,
+      })).sendAndConfirm(umi);
 
       console.log('inscribeRes', signatureToString(inscribeRes.signature));
 
@@ -162,6 +164,44 @@ export function Mint() {
       close();
     }
   }, [form.values, wallet.wallet, setInscription, metadata, open, close]);
+
+  const handleEngrave = useCallback(async () => {
+    if (!inscription) return;
+
+    open();
+    setModalContent('Engraving your Inscription...');
+    setEngraveTx(undefined);
+    try {
+      const umi = createUmi(connection);
+
+      umi.use(walletAdapterIdentity(wallet));
+      umi.use(mplTokenMetadata());
+
+      const res = await engrave(umi, {
+        metadata: inscription.tokenMetadataAccount,
+        mint: inscription.mintAccount,
+        updateAuthority: umi.identity,
+        engraverProgram: MPL_ENGRAVER_PROGRAM_ID,
+      }).prepend(setComputeUnitLimit(umi, { units: 1000000 }))
+      .sendAndConfirm(umi);
+
+      setEngraveTx(signatureToString(res.signature));
+      notifications.show({
+        title: 'Success',
+        message: 'Inscription engraved!',
+        color: 'green',
+      });
+    } catch (e: any) {
+      console.error(e);
+      notifications.show({
+        title: 'Error',
+        message: e.message,
+        color: 'red',
+      });
+    } finally {
+      close();
+    }
+  }, [inscription, wallet.wallet, open, close]);
 
   const fetchMetadata = useCallback(async () => {
     const v = form.validate();
@@ -224,15 +264,19 @@ export function Mint() {
             <Anchor target="_blank" href={`https://solscan.io/account/${inscription.mintAccount}?cluster=devnet`}>View mint account</Anchor>
             <Anchor target="_blank" href={`https://solscan.io/account/${inscription.inscriptionAccount}?cluster=devnet`}>View inscription account</Anchor>
             <Anchor target="_blank" href={`https://solscan.io/account/${inscription.tokenMetadataAccount}?cluster=devnet`}>View metadata account</Anchor>
+            {engraveTx && <Anchor target="_blank" href={`https://solscan.io/tx/${engraveTx}?cluster=devnet`}>View engrave tx</Anchor>}
           </Stack>
         </Container>
       }
+      {engraveTx ? null : inscription ?
+        <Button size="lg" mt="lg" onClick={handleEngrave}>{!wallet.connected ? 'Connect your wallet to engrave' : 'Engrave Inscription!'}</Button>
+        : <Button disabled={!wallet.connected || !metadata} size="lg" mt="lg" onClick={handleMint}>{!wallet.connected ? 'Connect your wallet to mint' : !metadata ? 'Fetch metadata first' : 'Mint Inscription!'}</Button>
+      }
 
-      <Button disabled={!wallet.connected || !metadata} size="lg" mt="lg" onClick={handleMint}>{!wallet.connected ? 'Connect your wallet to mint' : !metadata ? 'Fetch metadata first' : 'Mint Inscription!'}</Button>
       <Modal opened={opened} onClose={() => { }} centered withCloseButton={false}>
         <Center my="xl">
           <Stack gap="md">
-            <Text>Minting your Inscription...</Text>
+            <Text>{modalContent}</Text>
             <Center><Loader /></Center>
           </Stack>
         </Center>
