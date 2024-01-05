@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from 'react';
 import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adapter-wallets';
-import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
+import { WalletProvider } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import { Notifications } from '@mantine/notifications';
 import { AppShell, Container } from '@mantine/core';
 import { Mint } from '@/components/Mint/Mint';
 import { Header } from '@/components/Header/Header';
+import { UmiProvider } from '@/components/UmiProvider';
 
 export default function HomePage() {
   const [env, setEnv] = useState('devnet');
@@ -30,8 +31,9 @@ export default function HomePage() {
   }, [env]);
 
   return (
-    <ConnectionProvider endpoint={endpoint!}>
+    // <ConnectionProvider endpoint={endpoint!}>
       <WalletProvider wallets={wallets} autoConnect>
+        <UmiProvider endpoint={endpoint!}>
         <WalletModalProvider>
           <Notifications />
           <AppShell
@@ -54,7 +56,8 @@ export default function HomePage() {
             </AppShell.Main>
           </AppShell>
         </WalletModalProvider>
+        </UmiProvider>
       </WalletProvider>
-    </ConnectionProvider>
+    // </ConnectionProvider>
   );
 }

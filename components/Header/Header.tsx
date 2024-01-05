@@ -15,7 +15,7 @@ export function Header({ env, setEnv }: { env: string; setEnv: (env: string) => 
       <div className={classes.inner}>
         <Flex justify="center" align="center" gap="md">
           <MetaplexLogo variant={MetaplexLogoVariant.Small} />
-          <Title order={2}>Inscriptions Demo</Title>
+          <Title order={2}>Umi Upload Tester</Title>
         </Flex>
         <Group>
           <WalletButton />

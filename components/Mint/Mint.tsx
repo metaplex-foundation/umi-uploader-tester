@@ -1,285 +1,89 @@
 /* eslint-disable no-await-in-loop */
-import { Anchor, Box, Button, Center, Container, Fieldset, Image, Loader, Modal, Stack, Text, TextInput, Title } from '@mantine/core';
-import { useForm } from '@mantine/form';
-import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-import { useCallback, useState } from 'react';
-import { MplInscription, createShard, fetchInscriptionMetadata, findInscriptionMetadataPda, findInscriptionShardPda, findMintInscriptionPda, initializeFromMint, safeFetchInscriptionShard, writeData } from '@metaplex-foundation/mpl-inscription';
+import { Button, Container, Fieldset, FileInput, Select, Space, Title, Text } from '@mantine/core';
+import { useWallet } from '@solana/wallet-adapter-react';
 
-import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
-import { walletAdapterIdentity } from '@metaplex-foundation/umi-signer-wallet-adapters';
-import { Umi, generateSigner, percentAmount, publicKey } from '@metaplex-foundation/umi';
-import { TokenStandard, createV1, findMetadataPda, mintV1, mplTokenMetadata, engrave } from '@metaplex-foundation/mpl-token-metadata';
-import { MPL_ENGRAVER_PROGRAM_ID } from '@metaplex-foundation/mpl-engraver';
-import { CodeHighlightTabs } from '@mantine/code-highlight';
-import { findAssociatedTokenPda, setComputeUnitLimit } from '@metaplex-foundation/mpl-toolbox';
-import { base58 } from '@metaplex-foundation/umi/serializers';
-import { useDisclosure } from '@mantine/hooks';
-import { notifications } from '@mantine/notifications';
-
-async function fetchIdempotentInscriptionShard(umi: Umi) {
-  const shardAccount = findInscriptionShardPda(umi, { shardNumber: 0 });
-
-  // Check if the account has already been created.
-  let shardData = await safeFetchInscriptionShard(umi, shardAccount);
-
-  if (!shardData) {
-    await createShard(umi, {
-      shardAccount,
-      shardNumber: 0,
-    }).sendAndConfirm(umi);
-
-    // Then an account was created with the correct data.
-    shardData = await safeFetchInscriptionShard(umi, shardAccount);
-  }
-
-  return shardAccount;
-}
-
-const signatureToString = (signature: Uint8Array) => base58.deserialize(signature)[0];
-
-const validateMetadata = (metadata: any) => {
-  if (!metadata?.name?.length) return 'Name is required';
-  if (!metadata?.image?.length) return 'Image is required';
-  if (JSON.stringify(metadata).length > 1000) return 'Metadata is too large for demo, see docs for how to write large inscriptions';
-
-  return null;
-};
+import { useEffect, useState } from 'react';
+// import { createAwsUploader } from '@metaplex-foundation/umi-uploader-aws';
+import { createBundlrUploader } from '@metaplex-foundation/umi-uploader-bundlr';
+import { UploaderInterface, amountToNumber, createGenericFileFromBrowserFile } from '@metaplex-foundation/umi';
+import { createIrysUploader } from '@metaplex-foundation/umi-uploader-irys';
+import { createNftStorageUploader } from '@metaplex-foundation/umi-uploader-nft-storage';
+import { createInscriptionUploader } from '@metaplex-foundation/umi-uploader-inscriptions';
+import { useUmi } from '../useUmi';
 
 export function Mint() {
-  const wallet = useWallet();
-  const { connection } = useConnection();
-  const form = useForm({
-    initialValues: {
-      metadataUri: 'https://arweave.net/35nZmuuUlK1iY9G-dn5u_raI_lwGoNoR9TrhOKUPez0',
-    },
-    validate: {
-      metadataUri: (value) => {
-        if (!value?.length) return 'Metadata URI is required';
+  // const wallet = useWallet();
+  const umi = useUmi();
+  const [uploader, setUploader] = useState<string | null>(null);
+  const [uploaderInterface, setUploaderInterface] = useState<UploaderInterface | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [url, setUrl] = useState<string | null>(null);
+  const [cost, setCost] = useState<number | null>(null);
 
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const u = new URL(value);
-          return null;
-        } catch (e) {
-          return 'Metadata URI is invalid';
-        }
-      },
-    },
-  });
-
-  const [inscription, setInscription] = useState<any>(null);
-  const [metadata, setMetadata] = useState<any>(null);
-  const [metadataError, setMetadataError] = useState<string | null>(null);
-  const [fetchLoading, setFetchLoading] = useState(false);
-  const [opened, { open, close }] = useDisclosure(false);
-  const [modalContent, setModalContent] = useState<string>('Minting your Inscription...');
-  const [engraveTx, setEngraveTx] = useState<string>();
-
-  const handleMint = useCallback(async () => {
-    // console.log(form.values, wallet, metadata);
-    if (!wallet.wallet || !metadata) return;
-    try {
-      open();
-      setModalContent('Minting your Inscription...');
-      setInscription(null);
-      const umi = createUmi(connection);
-
-      umi.use(walletAdapterIdentity(wallet));
-      umi.use(mplTokenMetadata());
-      umi.use(MplInscription());
-
-      // create mint
-      const mint = generateSigner(umi);
-      const tokenMetadataAccount = findMetadataPda(umi, { mint: mint.publicKey });
-      const tokenAccount = findAssociatedTokenPda(umi, { mint: mint.publicKey, owner: publicKey(wallet.publicKey?.toBase58()!) });
-
-      const inscriptionAccount = await findMintInscriptionPda(umi, {
-        mint: mint.publicKey,
-      });
-      const inscriptionMetadataAccount = await findInscriptionMetadataPda(umi, {
-        inscriptionAccount: inscriptionAccount[0],
-      });
-
-      const mintRes = await createV1(umi, {
-        mint,
-        name: metadata.name,
-        uri: form.values.metadataUri,
-        sellerFeeBasisPoints: percentAmount(metadata.seller_fee_basis_points ? metadata.seller_fee_basis_points / 100 : 5),
-        tokenStandard: TokenStandard.NonFungible,
-      }).add(mintV1(umi, {
-        mint: mint.publicKey,
-        tokenStandard: TokenStandard.NonFungible,
-      })).sendAndConfirm(umi);
-
-      console.log('mintRes', signatureToString(mintRes.signature));
-
-      const inscribeRes = await initializeFromMint(umi, {
-        mintAccount: mint.publicKey,
-        inscriptionShardAccount: await fetchIdempotentInscriptionShard(umi),
-      }).add(writeData(umi, {
-        inscriptionAccount,
-        inscriptionMetadataAccount,
-        value: Buffer.from(
-          JSON.stringify(metadata)
-        ),
-        associatedTag: null,
-        offset: 0,
-      })).sendAndConfirm(umi);
-
-      console.log('inscribeRes', signatureToString(inscribeRes.signature));
-
-      // Then an account was created with the correct data.
-      const inscriptionMetadata = await fetchInscriptionMetadata(
-        umi,
-        inscriptionMetadataAccount
-      );
-
-      // console.log(inscriptionMetadata);
-
-      const i = {
-        inscriptionAccount: inscriptionAccount[0],
-        inscriptionMetadataAccount,
-        mintAccount: mint.publicKey,
-        tokenMetadataAccount: tokenMetadataAccount[0],
-        tokenAccount,
-        inscriptionMetadata,
-      };
-
-      console.log('inscription', i);
-
-      setInscription(i);
-      notifications.show({
-        title: 'Success',
-        message: 'Inscription minted!',
-        color: 'green',
-      });
-    } catch (e: any) {
-      console.error(e);
-      notifications.show({
-        title: 'Error',
-        message: e.message,
-        color: 'red',
-      });
-    } finally {
-      close();
+  const handleUpload = async () => {
+    if (!file) {
+      return;
     }
-  }, [form.values, wallet.wallet, setInscription, metadata, open, close]);
 
-  const handleEngrave = useCallback(async () => {
-    if (!inscription) return;
-
-    open();
-    setModalContent('Engraving your Inscription...');
-    setEngraveTx(undefined);
-    try {
-      const umi = createUmi(connection);
-
-      umi.use(walletAdapterIdentity(wallet));
-      umi.use(mplTokenMetadata());
-
-      const res = await engrave(umi, {
-        metadata: inscription.tokenMetadataAccount,
-        mint: inscription.mintAccount,
-        updateAuthority: umi.identity,
-        engraverProgram: MPL_ENGRAVER_PROGRAM_ID,
-      }).prepend(setComputeUnitLimit(umi, { units: 1000000 }))
-      .sendAndConfirm(umi);
-
-      setEngraveTx(signatureToString(res.signature));
-      notifications.show({
-        title: 'Success',
-        message: 'Inscription engraved!',
-        color: 'green',
-      });
-    } catch (e: any) {
-      console.error(e);
-      notifications.show({
-        title: 'Error',
-        message: e.message,
-        color: 'red',
-      });
-    } finally {
-      close();
+    if (!uploaderInterface) {
+      return;
     }
-  }, [inscription, wallet.wallet, open, close]);
 
-  const fetchMetadata = useCallback(async () => {
-    const v = form.validate();
-    if (v.hasErrors) return;
-    if (!form.values.metadataUri) return;
-    try {
-      setFetchLoading(true);
-      setMetadata(null);
-      setMetadataError(null);
-      const m = await fetch(form.values.metadataUri).then((res) => res.json());
-      setMetadata(m);
-      setMetadataError(validateMetadata(m));
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setFetchLoading(false);
+    setUrl((await uploaderInterface.upload([await createGenericFileFromBrowserFile(file)])).at(0) ?? null);
+  };
+
+  useEffect(() => {
+    switch (uploader) {
+      case 'AWS':
+        // setUploaderInterface(new createAwsUploader());
+        break;
+      case 'Bundlr (Arweave)':
+        setUploaderInterface(createBundlrUploader(umi));
+        break;
+      case 'Irys (Arweave)':
+        setUploaderInterface(createIrysUploader(umi));
+        break;
+      case 'NFT Storage (IPFS)':
+        setUploaderInterface(createNftStorageUploader(umi));
+        break;
+      case 'Inscriptions (Solana)':
+        setUploaderInterface(createInscriptionUploader(umi));
+        break;
+      default:
     }
-  }, [setMetadata, form.values.metadataUri]);
+  }, [uploader]);
+
+  useEffect(() => {
+    async function getCost() {
+      if (uploaderInterface && file) {
+        const price = await uploaderInterface.getUploadPrice([await createGenericFileFromBrowserFile(file)]);
+        setCost(amountToNumber(price));
+      }
+    }
+    getCost();
+  }, [uploaderInterface, file]);
 
   return (
     <Container size="md">
-      <Title order={3} mb="lg">Mint a new Inscription from existing metadata</Title>
-      {/* <Textarea
-        withAsterisk
-        label="JSON Metadata"
-        {...form.getInputProps('metadata')}
-        autosize
-        minRows={15}
-      /> */}
+      <Title order={3} mb="lg">Upload file to:</Title>
       <Fieldset>
-        <TextInput placeholder="https://arweave.net/35nZmuuUlK1iY9G-dn5u_raI_lwGoNoR9TrhOKUPez0" label="NFT metadata URI" {...form.getInputProps('metadataUri')} />
-        <Button mt="md" loading={fetchLoading} onClick={fetchMetadata}>Fetch metadata</Button>
-        {metadata &&
-          <Box mt="md">
-            <CodeHighlightTabs
-              withExpandButton
-              expandCodeLabel="Show full JSON"
-              collapseCodeLabel="Show less"
-              defaultExpanded={false}
-              mt="md"
-              mb="lg"
-              code={[{
-                fileName: 'metadata.json',
-                language: 'json',
-                code: JSON.stringify(metadata, null, 2),
-              }]}
-            />
-          </Box>}
-        {metadataError && <Text color="red">{metadataError}</Text>}
+        <Select
+          label="Storage Provider"
+          placeholder="Pick a provider"
+          data={['AWS', 'Bundlr (Arweave)', 'Irys (Arweave)', 'NFT Storage (IPFS)', 'Inscriptions (Solana)']}
+          onChange={setUploader}
+        />
+
+        <Space h="md" />
+
+        <FileInput label="File to Upload" onChange={setFile} />
+
+        <Space h="md" />
+
+        {cost && <Text size="md">{cost} SOL</Text>}
       </Fieldset>
 
-      {inscription &&
-        <Container size="xs">
-          <Stack gap="sm">
-            <Box mt="lg">
-              <Image radius="md" src={metadata.image} />
-            </Box>
-            <Title order={3}>{metadata.name}</Title>
-            <Text>Inscription #: {inscription.inscriptionMetadata.inscriptionRank.toString()}</Text>
-            <Anchor target="_blank" href={`https://solscan.io/account/${inscription.mintAccount}?cluster=devnet`}>View mint account</Anchor>
-            <Anchor target="_blank" href={`https://solscan.io/account/${inscription.inscriptionAccount}?cluster=devnet`}>View inscription account</Anchor>
-            <Anchor target="_blank" href={`https://solscan.io/account/${inscription.tokenMetadataAccount}?cluster=devnet`}>View metadata account</Anchor>
-            {engraveTx && <Anchor target="_blank" href={`https://solscan.io/tx/${engraveTx}?cluster=devnet`}>View engrave tx</Anchor>}
-          </Stack>
-        </Container>
-      }
-      {engraveTx ? null : inscription ?
-        <Button size="lg" mt="lg" onClick={handleEngrave}>{!wallet.connected ? 'Connect your wallet to engrave' : 'Engrave Inscription!'}</Button>
-        : <Button disabled={!wallet.connected || !metadata} size="lg" mt="lg" onClick={handleMint}>{!wallet.connected ? 'Connect your wallet to mint' : !metadata ? 'Fetch metadata first' : 'Mint Inscription!'}</Button>
-      }
-
-      <Modal opened={opened} onClose={() => { }} centered withCloseButton={false}>
-        <Center my="xl">
-          <Stack gap="md">
-            <Text>{modalContent}</Text>
-            <Center><Loader /></Center>
-          </Stack>
-        </Center>
-      </Modal>
+      <Button mt="lg" onClick={handleUpload}>Upload</Button>
+      {url && <iframe src={url} width="100%" height="500px" title="Uploaded File" />}
     </Container>);
 }
